@@ -1,0 +1,57 @@
+{
+  "domain": "invoice",
+  "version": 1,
+  "signature": {
+    "all_of": ["(?i)invoice"],
+    "any_of": ["(?i)tax id", "(?i)iban", "(?i)amount", "(?i)total"],
+    "min_score": 0.5
+  },
+  "fields": [
+    {
+      "name": "invoice_no",
+      "regex": "(?i)(?:invoice no|invoice #|inv)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "invoice_date",
+      "regex": "(?i)(?:date of issue|invoice date|date)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
+    },
+    {
+      "name": "total_amount",
+      "regex": "(?i)(?:total|amount due|grand total)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "type": "money",
+      "required": true
+    },
+    {
+      "name": "vendor_name",
+      "regex": "(?i)(?:seller|vendor|from)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "customer_name",
+      "regex": "(?i)(?:client|customer|billed to)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "line_items": {
+    "row_regex": "(?i)(.+?)\\s+(\\d+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)",
+    "columns": ["description", "qty", "rate", "amount"]
+  },
+  "entities": [
+    { "type": "Vendor", "business_key": ["vendor_name"], "properties": ["vendor_name"] },
+    { "type": "Customer", "business_key": ["customer_name"], "properties": ["customer_name"] },
+    { "type": "Invoice", "business_key": ["invoice_no"], "properties": ["invoice_no", "invoice_date", "total_amount"] }
+  ],
+  "relationships": [
+    { "type": "ISSUED", "from": "Vendor", "to": "Invoice" },
+    { "type": "BILLED_TO", "from": "Invoice", "to": "Customer" }
+  ],
+  "validation": {
+    "required_fields": ["invoice_no", "total_amount"]
+  }
+}

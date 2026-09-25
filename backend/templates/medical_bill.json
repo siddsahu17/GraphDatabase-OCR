@@ -1,0 +1,64 @@
+{
+  "domain": "medical_bill",
+  "version": 1,
+  "signature": {
+    "all_of": ["(?i)patient", "(?i)bill"],
+    "any_of": ["(?i)MRN", "(?i)hospital", "(?i)statement"],
+    "min_score": 0.5
+  },
+  "fields": [
+    {
+      "name": "mrn",
+      "regex": "(?i)(?:mrn|patient id)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "patient_name",
+      "regex": "(?i)patient name[:\\s]*([a-z\\s\\.]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "bill_no",
+      "regex": "(?i)(?:bill no|statement no|invoice no)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "bill_date",
+      "regex": "(?i)(?:bill date|statement date|date)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
+    },
+    {
+      "name": "total_amount",
+      "regex": "(?i)(?:total|amount due|total charge)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "type": "money",
+      "required": true
+    },
+    {
+      "name": "provider_name",
+      "regex": "(?i)^(.*(?:hospital|clinic|center|medical))",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "line_items": {
+    "row_regex": "(?i)(.+?)\\s+(\\d+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)",
+    "columns": ["description", "qty", "rate", "amount"]
+  },
+  "entities": [
+    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name"] },
+    { "type": "Hospital", "business_key": ["provider_name"], "properties": ["provider_name"] },
+    { "type": "MedicalBill", "business_key": ["bill_no"], "properties": ["bill_no", "bill_date", "total_amount"] }
+  ],
+  "relationships": [
+    { "type": "ISSUED_BILL", "from": "Hospital", "to": "MedicalBill" },
+    { "type": "FOR_PATIENT", "from": "MedicalBill", "to": "Patient" }
+  ],
+  "validation": {
+    "required_fields": ["mrn", "bill_no", "total_amount"],
+    "checks": ["sum(line_items.amount) ≈ total_amount"]
+  }
+}

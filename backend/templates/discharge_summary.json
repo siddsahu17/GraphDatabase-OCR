@@ -1,0 +1,59 @@
+{
+  "domain": "discharge_summary",
+  "version": 1,
+  "signature": {
+    "all_of": ["(?i)discharge", "(?i)summary"],
+    "any_of": ["(?i)admission", "(?i)diagnosis", "(?i)patient"],
+    "min_score": 0.5
+  },
+  "fields": [
+    {
+      "name": "mrn",
+      "regex": "(?i)(?:mrn|patient id)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "patient_name",
+      "regex": "(?i)patient name[:\\s]*([a-z\\s\\.]+)",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "summary_id",
+      "regex": "(?i)(?:summary id|record no|discharge no)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "admission_date",
+      "regex": "(?i)(?:admission date|date of admission)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
+    },
+    {
+      "name": "discharge_date",
+      "regex": "(?i)(?:discharge date|date of discharge)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
+    },
+    {
+      "name": "primary_diagnosis",
+      "regex": "(?i)(?:primary diagnosis|diagnosis)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "entities": [
+    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name"] },
+    { "type": "DischargeSummary", "business_key": ["summary_id", "mrn"], "properties": ["admission_date", "discharge_date"] },
+    { "type": "Condition", "business_key": ["primary_diagnosis"], "properties": ["primary_diagnosis"] }
+  ],
+  "relationships": [
+    { "type": "HAS_SUMMARY", "from": "Patient", "to": "DischargeSummary" },
+    { "type": "DIAGNOSED_WITH", "from": "DischargeSummary", "to": "Condition" }
+  ],
+  "validation": {
+    "required_fields": ["mrn"]
+  }
+}

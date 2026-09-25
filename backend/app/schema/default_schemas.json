@@ -1,0 +1,119 @@
+{
+  "invoice": {
+    "domain_name": "Commercial Invoice",
+    "description": "Standard schema for commercial and retail invoices",
+    "nodes": [
+      {
+        "label": "Invoice",
+        "primary_key": "invoice_number",
+        "properties": ["invoice_number", "invoice_date", "due_date", "total_amount", "tax_amount", "currency"]
+      },
+      {
+        "label": "Vendor",
+        "primary_key": "name",
+        "properties": ["name", "address", "phone", "email", "tax_id"]
+      },
+      {
+        "label": "Customer",
+        "primary_key": "name",
+        "properties": ["name", "address", "phone", "email"]
+      },
+      {
+        "label": "LineItem",
+        "primary_key": "description",
+        "properties": ["description", "quantity", "unit_price", "total_price"]
+      },
+      {
+        "label": "PaymentTerm",
+        "primary_key": "term_name",
+        "properties": ["term_name", "net_days"]
+      }
+    ],
+    "relationships": [
+      { "from": "Vendor", "type": "ISSUED", "to": "Invoice" },
+      { "from": "Invoice", "type": "BILLED_TO", "to": "Customer" },
+      { "from": "Invoice", "type": "CONTAINS_ITEM", "to": "LineItem" },
+      { "from": "Invoice", "type": "HAS_PAYMENT_TERM", "to": "PaymentTerm" }
+    ]
+  },
+  "medical_bill": {
+    "domain_name": "Medical Bill / Claim",
+    "description": "Schema for hospital, pharmacy, and clinic billing statements",
+    "nodes": [
+      {
+        "label": "MedicalBill",
+        "primary_key": "bill_id",
+        "properties": ["bill_id", "bill_date", "total_charge", "insurance_covered", "patient_copay"]
+      },
+      {
+        "label": "Patient",
+        "primary_key": "name",
+        "properties": ["name", "patient_id", "dob", "gender", "insurance_policy_no"]
+      },
+      {
+        "label": "Hospital",
+        "primary_key": "hospital_name",
+        "properties": ["hospital_name", "address", "phone", "registration_no"]
+      },
+      {
+        "label": "Doctor",
+        "primary_key": "doctor_name",
+        "properties": ["doctor_name", "specialization", "license_no"]
+      },
+      {
+        "label": "BillingItem",
+        "primary_key": "description",
+        "properties": ["description", "service_code", "category", "cost"]
+      }
+    ],
+    "relationships": [
+      { "from": "Hospital", "type": "ISSUED_BILL", "to": "MedicalBill" },
+      { "from": "MedicalBill", "type": "FOR_PATIENT", "to": "Patient" },
+      { "from": "MedicalBill", "type": "INCLUDES_SERVICE", "to": "BillingItem" },
+      { "from": "Doctor", "type": "ORDERED_SERVICE", "to": "BillingItem" }
+    ]
+  },
+  "discharge_summary": {
+    "domain_name": "Medical Discharge Summary",
+    "description": "Schema for clinical patient hospital discharge records",
+    "nodes": [
+      {
+        "label": "DischargeSummary",
+        "primary_key": "summary_id",
+        "properties": ["summary_id", "admission_date", "discharge_date", "discharge_status"]
+      },
+      {
+        "label": "Patient",
+        "primary_key": "name",
+        "properties": ["name", "patient_id", "dob", "gender"]
+      },
+      {
+        "label": "Condition",
+        "primary_key": "name",
+        "properties": ["name", "icd_code", "type"]
+      },
+      {
+        "label": "Medication",
+        "primary_key": "drug_name",
+        "properties": ["drug_name", "dosage", "frequency", "duration"]
+      },
+      {
+        "label": "Procedure",
+        "primary_key": "procedure_name",
+        "properties": ["procedure_name", "date_performed"]
+      },
+      {
+        "label": "Doctor",
+        "primary_key": "doctor_name",
+        "properties": ["doctor_name", "specialization"]
+      }
+    ],
+    "relationships": [
+      { "from": "Patient", "type": "HAS_SUMMARY", "to": "DischargeSummary" },
+      { "from": "DischargeSummary", "type": "DIAGNOSED_WITH", "to": "Condition" },
+      { "from": "DischargeSummary", "type": "PRESCRIBED", "to": "Medication" },
+      { "from": "DischargeSummary", "type": "UNDERWENT", "to": "Procedure" },
+      { "from": "Doctor", "type": "ATTENDED_BY", "to": "DischargeSummary" }
+    ]
+  }
+}
