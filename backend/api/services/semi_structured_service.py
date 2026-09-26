@@ -98,7 +98,7 @@ class SemiStructuredService:
         if os.path.isfile(path):
             target_files.append(path)
         else:
-            for ext in ("*.jpg", "*.jpeg", "*.png", "*.pdf", "*.tif", "*.tiff"):
+            for ext in ("*.jpg", "*.jpeg", "*.png", "*.pdf", "*.tif", "*.tiff", "*.txt"):
                 target_files.extend(glob.glob(os.path.join(path, ext)))
                 target_files.extend(glob.glob(os.path.join(path, "**", ext), recursive=True))
 

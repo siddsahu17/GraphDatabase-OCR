@@ -1,3 +1,4 @@
+import os
 import time
 from typing import List, Dict, Any, Tuple
 from models.domain import SemanticObject, GraphNode, GraphEdge, OCRResult
@@ -26,11 +27,35 @@ class CanonicalGraphBuilder:
 
         # 1. BUILD PROVENANCE LAYER NODES & EDGES (§10)
         doc_id = ocr_result.document_id
+        
+        # Determine domain root hub for domain connectivity
+        domain_name = "medical"
+        if knowledge_objects:
+            domain_name = knowledge_objects[0].provenance.get("template_domain", "medical")
+        
+        domain_clean = "invoice" if "invoice" in str(domain_name).lower() else "medical"
+        domain_hub_id = f"domain_{domain_clean}_graph"
+        domain_hub_name = "Invoice Knowledge Network" if domain_clean == "invoice" else "Medical Knowledge Network"
+        
+        domain_node = GraphNode(
+            id=domain_hub_id,
+            label="DomainGraph",
+            properties={
+                "id": domain_hub_id,
+                "name": domain_hub_name,
+                "domain": domain_clean
+            },
+            workspace_id=workspace_id
+        )
+        nodes.append(domain_node)
+
+        doc_filename = os.path.basename(ocr_result.source_path) if ocr_result.source_path else doc_id[:8]
         doc_node = GraphNode(
             id=doc_id,
             label="Document",
             properties={
                 "id": doc_id,
+                "name": f"Document ({doc_filename})",
                 "source_path": ocr_result.source_path,
                 "mime_type": ocr_result.mime_type,
                 "engine_used": ocr_result.engine_used,
@@ -41,52 +66,15 @@ class CanonicalGraphBuilder:
         )
         nodes.append(doc_node)
 
-        # Build Page and Chunk nodes
-        for page in ocr_result.pages:
-            page_id = f"{doc_id}_p{page.page_number}"
-            page_node = GraphNode(
-                id=page_id,
-                label="Page",
-                properties={
-                    "id": page_id,
-                    "document_id": doc_id,
-                    "page_number": page.page_number,
-                    "mean_confidence": page.mean_confidence
-                },
-                workspace_id=workspace_id
-            )
-            nodes.append(page_node)
-            edges.append(GraphEdge(
-                from_id=doc_id,
-                from_label="Document",
-                type="HAS_PAGE",
-                to_id=page_id,
-                to_label="Page",
-                workspace_id=workspace_id
-            ))
-
-            # Chunk node (300-500 token window)
-            chunk_id = f"{page_id}_c1"
-            chunk_node = GraphNode(
-                id=chunk_id,
-                label="Chunk",
-                properties={
-                    "id": chunk_id,
-                    "document_id": doc_id,
-                    "page_number": page.page_number,
-                    "text": page.text[:1000]
-                },
-                workspace_id=workspace_id
-            )
-            nodes.append(chunk_node)
-            edges.append(GraphEdge(
-                from_id=page_id,
-                from_label="Page",
-                type="HAS_CHUNK",
-                to_id=chunk_id,
-                to_label="Chunk",
-                workspace_id=workspace_id
-            ))
+        # Connect Document to central DomainGraph hub
+        edges.append(GraphEdge(
+            from_id=doc_id,
+            from_label="Document",
+            type="IN_DOMAIN",
+            to_id=domain_hub_id,
+            to_label="DomainGraph",
+            workspace_id=workspace_id
+        ))
 
         # 2. BUILD BUSINESS ENTITIES & RELATIONSHIPS FROM NON-REJECTED KOs
         for ko in knowledge_objects:
@@ -98,7 +86,12 @@ class CanonicalGraphBuilder:
 
             node_props = dict(ko.properties)
             node_props["id"] = ko_id
-            node_props["name"] = ko.entity
+            
+            # Ensure name is human-readable and filter out raw document hashes
+            raw_name = node_props.get("name") or ko.entity
+            if len(str(raw_name)) >= 64 and str(raw_name) == doc_id:
+                raw_name = f"{clean_label} Record"
+            node_props["name"] = str(raw_name)
 
             b_node = GraphNode(
                 id=ko_id,
@@ -107,6 +100,17 @@ class CanonicalGraphBuilder:
                 workspace_id=workspace_id
             )
             nodes.append(b_node)
+
+            # Link major entities to DomainGraph hub to unify subgraphs
+            if clean_label in ("Patient", "Vendor", "Hospital", "Customer"):
+                edges.append(GraphEdge(
+                    from_id=ko_id,
+                    from_label=clean_label,
+                    type="IN_DOMAIN",
+                    to_id=domain_hub_id,
+                    to_label="DomainGraph",
+                    workspace_id=workspace_id
+                ))
 
             # Link entity to Document provenance
             edges.append(GraphEdge(
@@ -122,22 +126,12 @@ class CanonicalGraphBuilder:
                 workspace_id=workspace_id
             ))
 
-            # Link entity to Chunk provenance (MENTIONS)
-            first_chunk_id = f"{doc_id}_p1_c1"
-            edges.append(GraphEdge(
-                from_id=ko_id,
-                from_label=clean_label,
-                type="MENTIONS",
-                to_id=first_chunk_id,
-                to_label="Chunk",
-                workspace_id=workspace_id
-            ))
-
-            # Business relationships
+            # Business relationships with edge properties
             for rel in ko.relationships:
                 from_lbl = label_resolver.sanitize_label(rel.get("from_label", clean_label))
                 to_lbl = label_resolver.sanitize_label(rel.get("to_label", "Entity"))
                 rel_type = label_resolver.sanitize_rel_type(rel.get("type", "RELATED_TO"))
+                rel_props = rel.get("properties", {})
 
                 edges.append(GraphEdge(
                     from_id=str(rel.get("from_id", ko_id)),
@@ -145,6 +139,7 @@ class CanonicalGraphBuilder:
                     type=rel_type,
                     to_id=str(rel.get("to_id")),
                     to_label=to_lbl,
+                    properties=rel_props,
                     workspace_id=workspace_id
                 ))
 

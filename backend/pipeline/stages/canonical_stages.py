@@ -82,8 +82,9 @@ class PersistenceStage(PipelineStage):
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         if ctx.graph_nodes or ctx.graph_edges:
-            res = falkor_client.merge_nodes_and_edges(ctx.graph_nodes, ctx.graph_edges)
-            logger.info(f"[{self.name}] Ingested {res.get('nodes_merged')} nodes and {res.get('edges_merged')} edges into FalkorDB")
+            target_graph = falkor_client.resolve_graph_name(ctx.domain)
+            res = falkor_client.merge_nodes_and_edges(ctx.graph_nodes, ctx.graph_edges, graph_name=target_graph)
+            logger.info(f"[{self.name}] Ingested {res.get('nodes_merged')} nodes and {res.get('edges_merged')} edges into FalkorDB graph '{target_graph}'")
         return ctx
 
 class ValidationStage(PipelineStage):

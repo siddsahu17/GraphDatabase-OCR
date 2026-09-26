@@ -26,11 +26,23 @@ class EntityRegistryStore:
             self._registry = {}
 
     def _save(self):
+        import time
         os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
         temp_path = f"{self.storage_path}.tmp"
-        with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(self._registry, f, indent=2)
-        os.replace(temp_path, self.storage_path)
+        try:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(self._registry, f, indent=2)
+            try:
+                os.replace(temp_path, self.storage_path)
+            except OSError:
+                time.sleep(0.05)
+                try:
+                    os.replace(temp_path, self.storage_path)
+                except OSError:
+                    with open(self.storage_path, "w", encoding="utf-8") as f:
+                        json.dump(self._registry, f, indent=2)
+        except Exception as e:
+            logger.warning(f"EntityRegistryStore save notice: {e}")
 
     def _make_key(self, entity_type: str, business_key_val: str) -> str:
         clean_type = entity_type.strip().lower()

@@ -15,9 +15,15 @@
     },
     {
       "name": "patient_name",
-      "regex": "(?i)patient name[:\\s]*([a-z\\s\\.]+)",
+      "regex": "(?i)(?:patient name|patient's name|patient)[:\\s]*([a-zA-Z\\s\\.]+?)(?=\\s*(?:mrn|dob|date|$))",
       "type": "string",
       "required": true
+    },
+    {
+      "name": "dob",
+      "regex": "(?i)(?:dob|date of birth)[:\\s]*(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
     },
     {
       "name": "summary_id",
@@ -33,25 +39,56 @@
     },
     {
       "name": "discharge_date",
-      "regex": "(?i)(?:discharge date|date of discharge)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "regex": "(?i)(?:discharge date|date of discharge|date/time)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
       "type": "date",
       "required": false
     },
     {
       "name": "primary_diagnosis",
-      "regex": "(?i)(?:primary diagnosis|diagnosis)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "regex": "(?i)(?:admission diagnosis|primary diagnosis|diagnosis)[:\\s]*([a-zA-Z0-9\\s,\\.]+?)(?=\\s*(?:\\(icd|icd-10|$))",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "icd_code",
+      "regex": "(?i)(?:icd-10[:\\s]*|icd[:\\s]*)([a-z0-9\\.]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "provider_name",
+      "regex": "(?i)^([^\r\n]+(?:hospital|clinic|center|medical|institute|college))",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "attending_physician",
+      "regex": "(?i)\\b(Dr\\.[a-zA-Z\\s\\.,]+(?:MD|DO|MBBS)?)\\b",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "medications",
+      "regex": "(?i)(?:discharge medications|medications)[:\\s]*([\\s\\S]+?)(?=\\n\\d+\\.|\\n[A-Z\\s]+:|$)",
       "type": "string",
       "required": false
     }
   ],
   "entities": [
-    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name"] },
-    { "type": "DischargeSummary", "business_key": ["summary_id", "mrn"], "properties": ["admission_date", "discharge_date"] },
-    { "type": "Condition", "business_key": ["primary_diagnosis"], "properties": ["primary_diagnosis"] }
+    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name", "mrn", "dob"] },
+    { "type": "Hospital", "business_key": ["provider_name"], "properties": ["provider_name"] },
+    { "type": "DischargeSummary", "business_key": ["mrn", "discharge_date"], "properties": ["summary_id", "admission_date", "discharge_date", "primary_diagnosis"] },
+    { "type": "Condition", "business_key": ["icd_code", "primary_diagnosis"], "properties": ["primary_diagnosis", "icd_code"] },
+    { "type": "Doctor", "business_key": ["attending_physician"], "properties": ["attending_physician"] },
+    { "type": "Medication", "business_key": ["name"], "properties": ["name"] }
   ],
   "relationships": [
-    { "type": "HAS_SUMMARY", "from": "Patient", "to": "DischargeSummary" },
-    { "type": "DIAGNOSED_WITH", "from": "DischargeSummary", "to": "Condition" }
+    { "type": "ISSUED_SUMMARY", "from": "Hospital", "to": "DischargeSummary" },
+    { "type": "FOR_PATIENT", "from": "DischargeSummary", "to": "Patient" },
+    { "type": "HAS_DISCHARGE_SUMMARY", "from": "Patient", "to": "DischargeSummary" },
+    { "type": "DIAGNOSED_WITH", "from": "Patient", "to": "Condition", "properties": ["primary_diagnosis", "icd_code"] },
+    { "type": "ATTENDED", "from": "Doctor", "to": "Patient" },
+    { "type": "PRESCRIBED", "from": "DischargeSummary", "to": "Medication" }
   ],
   "validation": {
     "required_fields": ["mrn"]

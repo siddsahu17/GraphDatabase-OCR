@@ -1,7 +1,11 @@
 import React from 'react';
-import { Network, Upload, Layers, Sliders, Database } from 'lucide-react';
+import { Network, Upload, Layers, Sliders, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, dbStatus }) {
+export default function Navbar({ activeTab, setActiveTab, dbStatus, theme, setTheme }) {
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
   return (
     <header className="navbar">
       <div className="brand">
@@ -9,8 +13,8 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus }) {
           <Network size={24} />
         </div>
         <div className="brand-title">
-          <h1>FalkorDB Graph OCR</h1>
-          <span className="badge">React + Vite + Docling</span>
+          <h1>BodhiECG Graph OCR</h1>
+          <span className="badge">Multi-Domain FalkorDB</span>
         </div>
       </div>
 
@@ -25,7 +29,7 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus }) {
           className={`nav-btn ${activeTab === 'batch' ? 'active' : ''}`}
           onClick={() => setActiveTab('batch')}
         >
-          <Layers size={16} /> Batch Dataset Ingest
+          <Layers size={16} /> Batch Datasets
         </button>
         <button
           className={`nav-btn ${activeTab === 'explorer' ? 'active' : ''}`}
@@ -41,11 +45,21 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus }) {
         </button>
       </nav>
 
-      <div className="db-status">
-        <span className={`status-dot ${dbStatus}`} />
-        <span>
-          {dbStatus === 'online' ? 'FalkorDB Online' : dbStatus === 'warning' ? 'Mock Mode' : 'FalkorDB Offline'}
-        </span>
+      <div className="right-controls">
+        <button
+          className="theme-toggle-btn"
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
+        <div className="db-status">
+          <span className={`status-dot ${dbStatus}`} />
+          <span>
+            {dbStatus === 'online' ? 'FalkorDB Online' : dbStatus === 'warning' ? 'Mock Mode' : 'FalkorDB Offline'}
+          </span>
+        </div>
       </div>
     </header>
   );

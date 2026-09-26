@@ -9,6 +9,12 @@ import './index.css';
 export default function App() {
   const [activeTab, setActiveTab] = useState('upload');
   const [dbStatus, setDbStatus] = useState('warning');
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     fetch('/api/graph-data')
@@ -25,7 +31,13 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} dbStatus={dbStatus} />
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        dbStatus={dbStatus}
+        theme={theme}
+        setTheme={setTheme}
+      />
 
       <main className="main-content">
         {activeTab === 'upload' && <DocumentUploadTab />}

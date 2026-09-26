@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Any, List, Tuple
-from app.graph.falkor_client import falkor_client
+from typing import Dict, Any, List, Tuple, Optional
+from graph.falkordb import falkor_client
+from models.domain import GraphNode, GraphEdge
 
 logger = logging.getLogger(__name__)
 
@@ -14,17 +15,11 @@ class CypherBuilder:
         return "".join(c for c in key if c.isalnum() or c == '_')
 
     def build_node_merge_query(self, node: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-        """
-        Builds Cypher MERGE query for a single node.
-        """
         label = self.sanitize_label(node.get("label", "Entity"))
         node_id = str(node.get("id", "default_id"))
         properties = node.get("properties", {})
-        
-        # Ensure 'id' is in properties for primary lookup
         properties["id"] = node_id
 
-        # Escape parameter keys
         params = {}
         set_clauses = []
         for k, v in properties.items():
@@ -40,9 +35,6 @@ class CypherBuilder:
         return cypher, params
 
     def build_relationship_merge_query(self, rel: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-        """
-        Builds Cypher MERGE query for a relationship between two nodes.
-        """
         from_label = self.sanitize_label(rel.get("from_label", "Entity"))
         from_id = str(rel.get("from_id", ""))
         rel_type = self.sanitize_label(rel.get("type", "RELATED_TO")).upper()
@@ -61,44 +53,37 @@ class CypherBuilder:
         )
         return cypher, params
 
-    def ingest_graph_data(self, graph_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Ingests all nodes and relationships into FalkorDB graph.
-        Returns execution statistics.
-        """
+    def ingest_graph_data(self, graph_data: Dict[str, Any], domain: Optional[str] = None) -> Dict[str, Any]:
         nodes = graph_data.get("nodes", [])
         relationships = graph_data.get("relationships", [])
+        target_domain = domain or graph_data.get("domain")
 
-        nodes_created = 0
-        rels_created = 0
-        queries_executed = []
+        g_nodes = [
+            GraphNode(
+                id=str(n.get("id")),
+                label=str(n.get("label", "Entity")),
+                properties=n.get("properties", {})
+            )
+            for n in nodes
+        ]
+        g_edges = [
+            GraphEdge(
+                from_id=str(r.get("from_id")),
+                from_label=str(r.get("from_label", "Entity")),
+                type=str(r.get("type", "RELATED_TO")),
+                to_id=str(r.get("to_id")),
+                to_label=str(r.get("to_label", "Entity"))
+            )
+            for r in relationships
+        ]
 
-        # 1. Ingest Nodes
-        for node in nodes:
-            try:
-                cypher, params = self.build_node_merge_query(node)
-                queries_executed.append(cypher)
-                falkor_client.query(cypher, params)
-                nodes_created += 1
-            except Exception as e:
-                logger.error(f"Error ingesting node {node}: {e}")
-
-        # 2. Ingest Relationships
-        for rel in relationships:
-            try:
-                cypher, params = self.build_relationship_merge_query(rel)
-                queries_executed.append(cypher)
-                falkor_client.query(cypher, params)
-                rels_created += 1
-            except Exception as e:
-                logger.error(f"Error ingesting relationship {rel}: {e}")
-
+        res = falkor_client.merge_nodes_and_edges(g_nodes, g_edges, graph_name=target_domain)
         return {
             "status": "success",
-            "nodes_ingested": nodes_created,
-            "relationships_ingested": rels_created,
-            "total_queries": len(queries_executed),
-            "sample_queries": queries_executed[:5]
+            "graph_name": res.get("graph_name"),
+            "nodes_ingested": res.get("nodes_merged"),
+            "relationships_ingested": res.get("edges_merged"),
+            "total_queries": len(g_nodes) + len(g_edges)
         }
 
 cypher_builder = CypherBuilder()

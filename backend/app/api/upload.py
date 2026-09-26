@@ -3,11 +3,11 @@ import shutil
 import tempfile
 from typing import List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.ocr.docling_parser import doc_parser
-from app.ocr.extractor import entity_extractor
+from pipeline.orchestrator import pipeline_orchestrator
+from common.logger import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter()
-
 TEMP_DIR = tempfile.gettempdir()
 
 @router.post("/process-images")
@@ -16,10 +16,11 @@ async def process_images(
     domain: str = Form("invoice")
 ):
     """
-    Processes multiple uploaded image files:
-    1. Runs Docling layout & text extraction on each file.
-    2. Runs Entity Extraction to build combined Nodes and Relationships graph schema.
-    3. Returns aggregated JSON graph preview.
+    Processes multiple uploaded document files via canonical PipelineOrchestrator:
+    1. Runs OCR Cascade (pypdf / docling / OpenCV preprocessing + Tesseract).
+    2. Runs Entity Alignment & Resolution.
+    3. Builds Graph Nodes & Edges for domain graph.
+    4. Returns aggregated JSON graph preview for frontend drag-and-drop UI.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
@@ -38,27 +39,52 @@ async def process_images(
             with open(temp_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            # 1. Parse image using Docling
-            ocr_result = doc_parser.parse_document(temp_path)
-            raw_text = ocr_result.get("raw_text", "")
-            combined_text.append(f"--- File: {file.filename} ---\n{raw_text}")
+            # Process document through canonical PipelineOrchestrator
+            ctx = pipeline_orchestrator.process_document(
+                file_path=temp_path,
+                domain=domain
+            )
 
-            # 2. Extract Graph Entities
-            extracted_graph = entity_extractor.extract_graph(raw_text, domain)
-            
-            nodes = extracted_graph.get("nodes", [])
-            rels = extracted_graph.get("relationships", [])
+            ocr_txt = ""
+            if ctx.ocr_result:
+                ocr_txt = ctx.ocr_result.full_text or ctx.ocr_result.normalized_text or f"Document File: {file.filename}"
+            else:
+                ocr_txt = f"Document File: {file.filename}"
+
+            combined_text.append(f"--- File: {file.filename} ---\n{ocr_txt}")
+
+            nodes = [
+                {
+                    "id": n.id,
+                    "label": n.label,
+                    "properties": n.properties
+                }
+                for n in ctx.graph_nodes
+            ]
+            rels = [
+                {
+                    "from_id": e.from_id,
+                    "from_label": e.from_label,
+                    "type": e.type,
+                    "to_id": e.to_id,
+                    "to_label": e.to_label
+                }
+                for e in ctx.graph_edges
+            ]
 
             combined_nodes.extend(nodes)
             combined_rels.extend(rels)
 
             file_results.append({
                 "filename": file.filename,
+                "document_id": ctx.document_id,
+                "status": ctx.status,
                 "nodes_count": len(nodes),
                 "rels_count": len(rels),
-                "parser": ocr_result.get("parser")
+                "parser": ctx.ocr_result.engine_used if ctx.ocr_result else "fallback"
             })
         except Exception as e:
+            logger.error(f"Error processing uploaded file '{file.filename}': {e}")
             file_results.append({
                 "filename": file.filename,
                 "error": str(e)
@@ -87,5 +113,4 @@ async def process_image(
     file: UploadFile = File(...),
     domain: str = Form("invoice")
 ):
-    res = await process_images(files=[file], domain=domain)
-    return res
+    return await process_images(files=[file], domain=domain)

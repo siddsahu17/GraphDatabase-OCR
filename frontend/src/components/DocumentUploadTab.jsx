@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileImage, X, Zap, Database, Wand2, Plus } from 'lucide-react';
+import { Upload, FileImage, FileText, X, Zap, Database, Wand2, Plus, FileCheck, CheckCircle } from 'lucide-react';
 
 export default function DocumentUploadTab() {
   const [selectedDomain, setSelectedDomain] = useState('invoice');
@@ -10,6 +10,11 @@ export default function DocumentUploadTab() {
   const [currentStep, setCurrentStep] = useState(1);
   const [activeSubTab, setActiveSubTab] = useState('nodes');
   const [result, setResult] = useState(null);
+
+  const getTargetGraphName = (domain) => {
+    if (domain === 'invoice') return 'invoice_graph';
+    return 'medical_graph';
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -65,7 +70,7 @@ export default function DocumentUploadTab() {
       setResult(data);
       setCurrentStep(4);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      alert(`Processing error: ${err.message}`);
       setCurrentStep(1);
     } finally {
       setProcessing(false);
@@ -77,14 +82,15 @@ export default function DocumentUploadTab() {
 
     setIngesting(true);
     try {
+      const targetGraph = getTargetGraphName(selectedDomain);
       const res = await fetch('/api/ingest-graph', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ graph: result.graph }),
+        body: JSON.stringify({ graph: result.graph, domain: selectedDomain }),
       });
 
       const data = await res.json();
-      alert(`Successfully committed ${data.nodes_ingested} nodes and ${data.relationships_ingested} relationships into FalkorDB!`);
+      alert(`Successfully committed ${data.nodes_ingested || 0} nodes and ${data.relationships_ingested || 0} relationships into FalkorDB target graph '${data.graph_name || targetGraph}'!`);
     } catch (err) {
       alert(`Commit error: ${err.message}`);
     } finally {
@@ -92,28 +98,34 @@ export default function DocumentUploadTab() {
     }
   };
 
+  const getFileIcon = (fileName) => {
+    if (fileName.endsWith('.pdf')) return <FileText size={20} color="#ec4899" />;
+    if (fileName.endsWith('.txt') || fileName.endsWith('.csv')) return <FileText size={20} color="#10b981" />;
+    return <FileImage size={20} color="#6366f1" />;
+  };
+
   const nodes = result?.graph?.nodes || [];
   const rels = result?.graph?.relationships || [];
 
   return (
     <div className="grid-2col">
-      {/* Left Column: Input */}
+      {/* Left Column: Drag & Drop File Upload */}
       <div className="card">
         <div className="card-header">
-          <h2><Upload size={20} /> Upload Multiple Document Images</h2>
-          <p>Upload single or multiple Invoice / Medical scans to run Docling OCR & extract FalkorDB graph nodes.</p>
+          <h2><Upload size={20} /> Drag & Drop Document Ingestion</h2>
+          <p>Drop your document scans or clinical records directly here to extract entities into domain graphs.</p>
         </div>
 
         <div className="form-group">
-          <label>Target Knowledge Domain Schema</label>
+          <label>Target Domain Graph</label>
           <select
             className="custom-select"
             value={selectedDomain}
             onChange={(e) => setSelectedDomain(e.target.value)}
           >
-            <option value="invoice">Commercial Invoice (Vendor, Invoice, Customer, LineItem)</option>
-            <option value="medical_bill">Medical Bill (Hospital, Patient, Bill, BillingItem)</option>
-            <option value="discharge_summary">Medical Discharge Summary (Patient, Condition, Medication)</option>
+            <option value="invoice">📊 Commercial Invoice ➔ invoice_graph</option>
+            <option value="medical_bill">🏥 Medical Bill ➔ medical_graph</option>
+            <option value="discharge_summary">📑 Clinical Discharge Summary ➔ medical_graph</option>
           </select>
         </div>
 
@@ -124,29 +136,29 @@ export default function DocumentUploadTab() {
           onDrop={handleDrop}
           onClick={() => document.getElementById('file-input-multi').click()}
         >
-          <FileImage className="drop-icon" />
-          <p className="drop-title">Drag & drop document scan(s) here</p>
-          <span className="drop-sub">Supports multiple JPG, PNG, WEBP files</span>
+          <Upload className="drop-icon" />
+          <p className="drop-title">Drag & drop document file(s) here</p>
+          <span className="drop-sub">Supports single or multiple PDF, JPG, PNG, WEBP, TXT files</span>
           <input
             type="file"
             id="file-input-multi"
-            accept="image/*"
+            accept="image/*,application/pdf,.pdf,.txt,.csv"
             multiple
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
-          <button type="button" className="btn btn-secondary"><Plus size={16} /> Browse Files</button>
+          <button type="button" className="btn btn-secondary"><Plus size={16} /> Choose Files</button>
         </div>
 
         {files.length > 0 && (
-          <div className="mt-4" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9ca3af', marginBottom: '0.5rem' }}>
+          <div className="file-preview-list">
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Selected Files ({files.length})
             </div>
             {files.map((f, idx) => (
-              <div key={idx} className="file-preview-card" style={{ marginTop: '0.4rem' }}>
+              <div key={idx} className="file-preview-card">
                 <div className="file-info">
-                  <FileImage size={20} color="#6366f1" />
+                  {getFileIcon(f.name)}
                   <div>
                     <div className="file-name">{f.name}</div>
                     <div className="file-size">{(f.size / 1024).toFixed(1)} KB</div>
@@ -166,27 +178,28 @@ export default function DocumentUploadTab() {
           onClick={runProcessing}
         >
           {processing ? <Zap className="fa-spin" size={18} /> : <Zap size={18} />}
-          {processing ? `Processing ${files.length} Document(s)...` : `Run Docling OCR & Extract Graph (${files.length} Files)`}
+          {processing ? `Running OCR & Pipeline (${files.length} Files)...` : `Run OCR & Extract Graph (${files.length} Files)`}
         </button>
       </div>
 
-      {/* Right Column: Results & Stepper */}
+      {/* Right Column: Pipeline Stepper & Extracted Graph */}
       <div className="card">
         <div className="card-header">
-          <h2>Extraction Pipeline Status</h2>
+          <h2>Extraction & Domain Graph Status</h2>
+          <p>Domain Target: <strong style={{ color: 'var(--accent-primary)' }}>{getTargetGraphName(selectedDomain)}</strong></p>
         </div>
 
         {/* Stepper */}
         <div className="stepper">
           {[
             { num: 1, label: 'Upload' },
-            { num: 2, label: 'Docling OCR' },
-            { num: 3, label: 'LLM Extraction' },
-            { num: 4, label: 'FalkorDB Graph' },
+            { num: 2, label: 'OCR Cascade' },
+            { num: 3, label: 'Entity Alignment' },
+            { num: 4, label: 'Graph Ready' },
           ].map((s, idx) => (
             <React.Fragment key={s.num}>
               <div className={`step-item ${currentStep > s.num ? 'completed' : currentStep === s.num ? 'active' : ''}`}>
-                <div className="step-badge">{s.num}</div>
+                <div className="step-badge">{currentStep > s.num ? <CheckCircle size={16} /> : s.num}</div>
                 <div className="step-label">{s.label}</div>
               </div>
               {idx < 3 && <div className="step-line" />}
@@ -200,13 +213,13 @@ export default function DocumentUploadTab() {
             className={`sub-tab-btn ${activeSubTab === 'nodes' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('nodes')}
           >
-            Extracted Graph ({nodes.length} Nodes, {rels.length} Edges)
+            Graph Entities ({nodes.length} Nodes, {rels.length} Edges)
           </button>
           <button
             className={`sub-tab-btn ${activeSubTab === 'ocr' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('ocr')}
           >
-            Docling OCR Text
+            OCR Text Preview
           </button>
           <button
             className={`sub-tab-btn ${activeSubTab === 'json' ? 'active' : ''}`}
@@ -228,7 +241,7 @@ export default function DocumentUploadTab() {
                     </div>
                     <div className="node-props">
                       {Object.entries(n.properties || {}).map(([k, v]) => (
-                        <div key={k}><strong>{k}:</strong> {v}</div>
+                        <div key={k}><strong>{k}:</strong> {String(v)}</div>
                       ))}
                     </div>
                   </div>
@@ -236,14 +249,14 @@ export default function DocumentUploadTab() {
               ) : (
                 <div className="empty-state">
                   <Wand2 size={32} />
-                  <p>Upload document image(s) and click "Run Docling OCR" to extract graph entities.</p>
+                  <p>Drop your document scans on the left dropzone and click "Run OCR & Extract Graph".</p>
                 </div>
               )}
             </div>
           )}
 
           {activeSubTab === 'ocr' && (
-            <pre className="code-block">{result?.parsed_text || 'Docling text will appear here...'}</pre>
+            <pre className="code-block">{result?.parsed_text || 'OCR text output will appear here...'}</pre>
           )}
 
           {activeSubTab === 'json' && (
@@ -257,7 +270,7 @@ export default function DocumentUploadTab() {
           onClick={commitGraph}
         >
           <Database size={18} />
-          {ingesting ? 'Committing to FalkorDB...' : 'Commit Combined Graph into FalkorDB'}
+          {ingesting ? `Committing to ${getTargetGraphName(selectedDomain)}...` : `Commit Graph into ${getTargetGraphName(selectedDomain)}`}
         </button>
       </div>
     </div>

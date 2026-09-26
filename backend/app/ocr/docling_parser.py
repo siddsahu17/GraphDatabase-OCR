@@ -23,7 +23,7 @@ class DocumentParser:
 
     def parse_document(self, file_path: str) -> Dict[str, Any]:
         """
-        Parses an image or document using Docling.
+        Parses an image or document using Docling + Tesseract fallback.
         Returns a dict containing extracted raw_text, markdown_text, and parser metadata.
         """
         if not os.path.exists(file_path):
@@ -39,36 +39,39 @@ class DocumentParser:
                 markdown_output = doc.export_to_markdown() if hasattr(doc, "export_to_markdown") else str(doc)
                 raw_output = doc.export_to_text() if hasattr(doc, "export_to_text") else markdown_output
                 
+                if raw_output and raw_output.strip():
+                    return {
+                        "status": "success",
+                        "parser": "docling",
+                        "markdown": markdown_output,
+                        "raw_text": raw_output
+                    }
+            except Exception as e:
+                logger.warning(f"Docling conversion notice for {file_path}: {e}")
+
+        # Fallback 1: Tesseract OCR
+        try:
+            import pytesseract
+            from PIL import Image
+            img = Image.open(file_path)
+            tess_text = pytesseract.image_to_string(img) or ""
+            if tess_text.strip():
                 return {
                     "status": "success",
-                    "parser": "docling",
-                    "markdown": markdown_output,
-                    "raw_text": raw_output
+                    "parser": "tesseract_fallback",
+                    "markdown": tess_text,
+                    "raw_text": tess_text
                 }
-            except Exception as e:
-                logger.error(f"Docling conversion failed for {file_path}: {e}")
-
-        # Fallback 1: EasyOCR / RapidOCR
-        try:
-            import easyocr
-            reader = easyocr.Reader(['en'], gpu=False)
-            ocr_results = reader.readtext(file_path, detail=0)
-            extracted_text = "\n".join(ocr_results)
-            return {
-                "status": "success",
-                "parser": "easyocr_fallback",
-                "markdown": extracted_text,
-                "raw_text": extracted_text
-            }
         except Exception as e:
-            logger.warning(f"EasyOCR fallback failed: {e}")
+            logger.debug(f"Tesseract fallback notice: {e}")
 
-        # Fallback 2: Basic image info placeholder
+        # Fallback 2: Basic filename info
+        base_name = os.path.basename(file_path)
         return {
             "status": "warning",
-            "parser": "basic_info",
-            "markdown": f"Document: {os.path.basename(file_path)}",
-            "raw_text": f"Document: {os.path.basename(file_path)}"
+            "parser": "filename_fallback",
+            "markdown": f"Document File: {base_name}",
+            "raw_text": f"Document File: {base_name}"
         }
 
 doc_parser = DocumentParser()

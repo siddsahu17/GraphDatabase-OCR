@@ -3,37 +3,73 @@
   "version": 1,
   "signature": {
     "all_of": ["(?i)invoice"],
-    "any_of": ["(?i)tax id", "(?i)iban", "(?i)amount", "(?i)total"],
+    "any_of": ["(?i)tax id", "(?i)iban", "(?i)amount", "(?i)total", "(?i)vendor", "(?i)billed to"],
     "min_score": 0.5
   },
   "fields": [
     {
       "name": "invoice_no",
-      "regex": "(?i)(?:invoice no|invoice #|inv)[:\\s]*([a-z0-9-]+)",
+      "regex": "(?i)(?:invoice\\s*no|invoice\\s*#|inv\\s*#|invoice\\s*id|inv[:\\s#]+)[:\\s#]*([a-z0-9-]+)",
       "type": "string",
       "required": true
     },
     {
       "name": "invoice_date",
-      "regex": "(?i)(?:date of issue|invoice date|date)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "regex": "(?i)(?:date of issue|invoice date|date)[:\\s]*(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
       "type": "date",
       "required": false
     },
     {
+      "name": "due_date",
+      "regex": "(?i)(?:due date|payment due|pay by)[:\\s]*(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
+    },
+    {
+      "name": "po_number",
+      "regex": "(?i)(?:po no|po #|purchase order|order no)[:\\s]*([a-z0-9-]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "subtotal",
+      "regex": "(?i)(?:subtotal|sub total|net amount)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "type": "money",
+      "required": false
+    },
+    {
+      "name": "tax_amount",
+      "regex": "(?i)(?:tax|vat|gst|sales tax)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "type": "money",
+      "required": false
+    },
+    {
       "name": "total_amount",
-      "regex": "(?i)(?:total|amount due|grand total)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "regex": "(?i)(?:total amount|grand total|balance due|total billed|total)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
       "type": "money",
       "required": true
     },
     {
       "name": "vendor_name",
-      "regex": "(?i)(?:seller|vendor|from)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "regex": "(?i)(?:seller|vendor|from|issued by)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "vendor_tax_id",
+      "regex": "(?i)(?:vendor tax id|tax id|vat id|gstin|ein)[:\\s]*([a-z0-9-]+)",
       "type": "string",
       "required": false
     },
     {
       "name": "customer_name",
-      "regex": "(?i)(?:client|customer|billed to)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "regex": "(?i)(?:client|customer|billed to|bill to)[:\\s]*([a-z0-9\\s,\\.]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "payment_terms",
+      "regex": "(?i)(?:payment terms|terms)[:\\s]*([a-z0-9\\s]+)",
       "type": "string",
       "required": false
     }
@@ -43,13 +79,16 @@
     "columns": ["description", "qty", "rate", "amount"]
   },
   "entities": [
-    { "type": "Vendor", "business_key": ["vendor_name"], "properties": ["vendor_name"] },
+    { "type": "Vendor", "business_key": ["vendor_tax_id", "vendor_name"], "properties": ["vendor_name", "vendor_tax_id"] },
     { "type": "Customer", "business_key": ["customer_name"], "properties": ["customer_name"] },
-    { "type": "Invoice", "business_key": ["invoice_no"], "properties": ["invoice_no", "invoice_date", "total_amount"] }
+    { "type": "Invoice", "business_key": ["invoice_no"], "properties": ["invoice_no", "invoice_date", "due_date", "po_number", "subtotal", "tax_amount", "total_amount", "payment_terms"] },
+    { "type": "LineItem", "business_key": ["description"], "properties": ["description", "qty", "rate", "amount"] }
   ],
   "relationships": [
-    { "type": "ISSUED", "from": "Vendor", "to": "Invoice" },
-    { "type": "BILLED_TO", "from": "Invoice", "to": "Customer" }
+    { "type": "ISSUED_INVOICE", "from": "Vendor", "to": "Invoice" },
+    { "type": "BILLED_TO", "from": "Invoice", "to": "Customer" },
+    { "type": "FOR_CUSTOMER", "from": "Invoice", "to": "Customer" },
+    { "type": "HAS_LINE_ITEM", "from": "Invoice", "to": "LineItem" }
   ],
   "validation": {
     "required_fields": ["invoice_no", "total_amount"]

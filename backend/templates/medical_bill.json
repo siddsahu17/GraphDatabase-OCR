@@ -2,63 +2,105 @@
   "domain": "medical_bill",
   "version": 1,
   "signature": {
-    "all_of": ["(?i)patient", "(?i)bill"],
-    "any_of": ["(?i)MRN", "(?i)hospital", "(?i)statement"],
+    "all_of": ["(?i)patient", "(?i)statement|bill"],
+    "any_of": ["(?i)MRN|guarantor", "(?i)hospital", "(?i)charges"],
     "min_score": 0.5
   },
   "fields": [
     {
       "name": "mrn",
-      "regex": "(?i)(?:mrn|patient id)[:\\s]*([a-z0-9-]+)",
+      "regex": "(?i)(?:guarantor no|mrn|patient id)[:\\s]*([a-z0-9-]+)",
       "type": "string",
       "required": true
     },
     {
       "name": "patient_name",
-      "regex": "(?i)patient name[:\\s]*([a-z\\s\\.]+)",
+      "regex": "(?i)(?:patient name|patient's name)[:\\s]*([a-zA-Z\\s\\.]+?)(?=\\s*(?:primary|date|dob|mrn|icd|group|$))",
       "type": "string",
       "required": true
+    },
+    {
+      "name": "dob",
+      "regex": "(?i)(?:date of birth|dob)[:\\s]*(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "type": "date",
+      "required": false
     },
     {
       "name": "bill_no",
-      "regex": "(?i)(?:bill no|statement no|invoice no)[:\\s]*([a-z0-9-]+)",
+      "regex": "(?i)(?:bill no|statement no|invoice no|account)[:\\s]*([a-z0-9-]+)",
       "type": "string",
-      "required": true
+      "required": false
     },
     {
       "name": "bill_date",
-      "regex": "(?i)(?:bill date|statement date|date)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
+      "regex": "(?i)(?:statement date|bill date|date)[:\\s]*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})",
       "type": "date",
       "required": false
     },
     {
       "name": "total_amount",
-      "regex": "(?i)(?:total|amount due|total charge)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "regex": "(?i)(?:total billed charges|total amount|total charge|total)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
       "type": "money",
       "required": true
     },
     {
+      "name": "patient_amount_due",
+      "regex": "(?i)(?:patient amount due|amount due)[:\\s]*[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+      "type": "money",
+      "required": false
+    },
+    {
       "name": "provider_name",
-      "regex": "(?i)^(.*(?:hospital|clinic|center|medical))",
+      "regex": "(?i)^([^\r\n]+(?:hospital|clinic|center|medical|institute|college))",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "primary_diagnosis",
+      "regex": "(?i)(?:primary diagnosis|diagnosis)[:\\s]*([a-zA-Z\\s\\.]+?)(?=\\s*(?:icd|code|$))",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "icd_code",
+      "regex": "(?i)(?:icd-10 code|icd-10|icd code)[:\\s]*([a-z0-9\\.]+)",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "insurance_name",
+      "regex": "(?i)(?:primary insurance|insurance carrier|insurance)[:\\s]*([a-zA-Z0-9\\s\\.]+?)(?=\\s*(?:group|no|policy|id|\\n|$))",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "group_no",
+      "regex": "(?i)(?:group no)[:\\s]*([a-z0-9-]+)",
       "type": "string",
       "required": false
     }
   ],
   "line_items": {
-    "row_regex": "(?i)(.+?)\\s+(\\d+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)\\s+[\\$\\u20b9\\u20ac]?([\\d\\.,]+)",
-    "columns": ["description", "qty", "rate", "amount"]
+    "row_regex": "(?i)(\\d{2}/\\d{2}/\\d{4})?\\s*([a-z0-9]+)?\\s+([a-zA-Z0-9\\s\\.-]{3,35})\\s+[\\$\\u20b9\\u20ac]?\\s*([\\d\\.,]+)",
+    "columns": ["date", "cpt", "description", "amount"]
   },
   "entities": [
-    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name"] },
+    { "type": "Patient", "business_key": ["mrn"], "properties": ["patient_name", "mrn", "dob"] },
     { "type": "Hospital", "business_key": ["provider_name"], "properties": ["provider_name"] },
-    { "type": "MedicalBill", "business_key": ["bill_no"], "properties": ["bill_no", "bill_date", "total_amount"] }
+    { "type": "MedicalBill", "business_key": ["mrn", "bill_date"], "properties": ["bill_no", "bill_date", "total_amount", "patient_amount_due"] },
+    { "type": "Condition", "business_key": ["icd_code", "primary_diagnosis"], "properties": ["primary_diagnosis", "icd_code"] },
+    { "type": "Insurance", "business_key": ["insurance_name"], "properties": ["insurance_name", "group_no"] },
+    { "type": "LineItem", "business_key": ["description"], "properties": ["description", "cpt", "amount"] }
   ],
   "relationships": [
     { "type": "ISSUED_BILL", "from": "Hospital", "to": "MedicalBill" },
-    { "type": "FOR_PATIENT", "from": "MedicalBill", "to": "Patient" }
+    { "type": "FOR_PATIENT", "from": "MedicalBill", "to": "Patient" },
+    { "type": "HAS_BILL", "from": "Patient", "to": "MedicalBill" },
+    { "type": "DIAGNOSED_WITH", "from": "Patient", "to": "Condition", "properties": ["primary_diagnosis", "icd_code"] },
+    { "type": "COVERED_BY", "from": "Patient", "to": "Insurance", "properties": ["insurance_name", "group_no"] },
+    { "type": "HAS_LINE_ITEM", "from": "MedicalBill", "to": "LineItem" }
   ],
   "validation": {
-    "required_fields": ["mrn", "bill_no", "total_amount"],
-    "checks": ["sum(line_items.amount) ≈ total_amount"]
+    "required_fields": ["mrn"]
   }
 }

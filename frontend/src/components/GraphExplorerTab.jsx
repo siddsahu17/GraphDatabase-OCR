@@ -1,16 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Network, RefreshCw, Maximize2, MousePointer } from 'lucide-react';
+import { Network, RefreshCw, Maximize2, MousePointer, Filter } from 'lucide-react';
 import { Network as VisNetwork, DataSet } from 'vis-network/standalone';
 
 export default function GraphExplorerTab() {
   const containerRef = useRef(null);
+  const [selectedDomainFilter, setSelectedDomainFilter] = useState('all');
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [selectedNode, setSelectedNode] = useState(null);
   const networkRef = useRef(null);
 
-  const fetchGraphData = async () => {
+  const fetchGraphData = async (domain = selectedDomainFilter) => {
     try {
-      const res = await fetch('/api/graph-data');
+      const url = domain && domain !== 'all' ? `/api/graph-data?domain=${domain}` : '/api/graph-data?domain=all';
+      const res = await fetch(url);
       const data = await res.json();
       setGraphData(data);
       renderNetwork(data.nodes || [], data.edges || []);
@@ -20,10 +22,10 @@ export default function GraphExplorerTab() {
   };
 
   useEffect(() => {
-    fetchGraphData();
-  }, []);
+    fetchGraphData(selectedDomainFilter);
+  }, [selectedDomainFilter]);
 
-  const getNodeColor = (label) => {
+  const getNodeColor = (label, graphName) => {
     switch (label) {
       case 'Invoice': return '#6366f1';
       case 'Vendor': return '#10b981';
@@ -31,7 +33,12 @@ export default function GraphExplorerTab() {
       case 'MedicalBill': return '#ec4899';
       case 'Patient': return '#3b82f6';
       case 'Hospital': return '#8b5cf6';
-      default: return '#64748b';
+      case 'Condition': return '#14b8a6';
+      case 'Medication': return '#eab308';
+      case 'Document': return '#64748b';
+      case 'Page': return '#94a3b8';
+      case 'Chunk': return '#475569';
+      default: return graphName === 'invoice_graph' ? '#6366f1' : '#ec4899';
     }
   };
 
@@ -40,10 +47,15 @@ export default function GraphExplorerTab() {
 
     const visNodes = nodes.map((n) => ({
       id: n.id,
-      label: `${n.label}\n${n.properties?.name || n.properties?.invoice_number || n.properties?.bill_id || n.id}`,
-      color: getNodeColor(n.label),
-      font: { color: '#ffffff', face: 'Outfit' },
+      label: `${n.label}\n${n.properties?.name || n.properties?.invoice_no || n.properties?.bill_id || n.properties?.id || n.id}`,
+      color: {
+        background: getNodeColor(n.label, n.graph),
+        border: '#ffffff',
+        highlight: { background: '#d946ef', border: '#ffffff' }
+      },
+      font: { color: '#ffffff', face: 'Outfit', size: 12 },
       properties: n.properties,
+      graph: n.graph,
       shape: 'box',
       margin: 10,
     }));
@@ -53,7 +65,7 @@ export default function GraphExplorerTab() {
       to: e.to,
       label: e.label,
       arrows: 'to',
-      color: { color: 'rgba(99, 102, 241, 0.6)' },
+      color: { color: 'rgba(99, 102, 241, 0.5)' },
       font: { color: '#a5b4fc', size: 10 },
     }));
 
@@ -64,7 +76,7 @@ export default function GraphExplorerTab() {
 
     const options = {
       physics: {
-        barnesHut: { gravitationalConstant: -3000, springLength: 120 },
+        barnesHut: { gravitationalConstant: -3500, springLength: 130 },
       },
       interaction: { hover: true },
     };
@@ -84,15 +96,37 @@ export default function GraphExplorerTab() {
     <div className="explorer-layout">
       <div className="explorer-header card">
         <div>
-          <h2><Network size={20} /> FalkorDB Graph Visualization Canvas</h2>
+          <h2><Network size={20} /> Domain Graph Visualization Canvas</h2>
           <span className="badge">{graphData.nodes?.length || 0} Nodes | {graphData.edges?.length || 0} Edges</span>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-secondary" onClick={fetchGraphData}>
-            <RefreshCw size={16} /> Refresh Graph
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div className="domain-tabs-filter">
+            <button
+              className={`filter-btn ${selectedDomainFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedDomainFilter('all')}
+            >
+              🌐 All Domains
+            </button>
+            <button
+              className={`filter-btn ${selectedDomainFilter === 'invoice' ? 'active' : ''}`}
+              onClick={() => setSelectedDomainFilter('invoice')}
+            >
+              📊 Invoice Graph
+            </button>
+            <button
+              className={`filter-btn ${selectedDomainFilter === 'medical' ? 'active' : ''}`}
+              onClick={() => setSelectedDomainFilter('medical')}
+            >
+              🏥 Medical Graph
+            </button>
+          </div>
+
+          <button className="btn btn-secondary" onClick={() => fetchGraphData(selectedDomainFilter)}>
+            <RefreshCw size={16} /> Refresh
           </button>
           <button className="btn btn-secondary" onClick={() => networkRef.current?.fit()}>
-            <Maximize2 size={16} /> Recenter View
+            <Maximize2 size={16} /> Recenter
           </button>
         </div>
       </div>
@@ -103,18 +137,21 @@ export default function GraphExplorerTab() {
         </div>
 
         <div className="card inspector-card">
-          <h3>Node Inspector</h3>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Node Inspector</h3>
           <div style={{ marginTop: '1rem' }}>
             {selectedNode ? (
               <div>
-                <span className="node-label">{selectedNode.label}</span>
-                <h4 style={{ marginTop: '0.25rem', marginBottom: '0.75rem' }}>{selectedNode.id}</h4>
-                <table style={{ width: '100%', fontSize: '0.85rem', textIndent: '0' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                  <span className="node-label">{selectedNode.label}</span>
+                  {selectedNode.graph && <span className="badge">{selectedNode.graph}</span>}
+                </div>
+                <h4 style={{ fontSize: '0.9rem', wordBreak: 'break-all', marginBottom: '0.75rem' }}>{selectedNode.id}</h4>
+                <table style={{ width: '100%', fontSize: '0.82rem' }}>
                   <tbody>
                     {Object.entries(selectedNode.properties || {}).map(([k, v]) => (
-                      <tr key={k} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <td style={{ padding: '0.4rem', color: '#9ca3af', fontWeight: '600' }}>{k}</td>
-                        <td style={{ padding: '0.4rem' }}>{v}</td>
+                      <tr key={k} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '0.4rem 0', color: 'var(--text-secondary)', fontWeight: '600' }}>{k}</td>
+                        <td style={{ padding: '0.4rem 0', wordBreak: 'break-all' }}>{String(v)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -123,7 +160,7 @@ export default function GraphExplorerTab() {
             ) : (
               <div className="empty-state">
                 <MousePointer size={28} />
-                <p>Click any node on the graph canvas to inspect its properties.</p>
+                <p>Click any node on the graph canvas to inspect its properties and graph origin.</p>
               </div>
             )}
           </div>
